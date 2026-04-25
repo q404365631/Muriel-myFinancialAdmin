@@ -261,6 +261,74 @@ function syncClientIdPlaceholders() {
   }
 }
 
+function resetClientEditMode() {
+  uiState.editingClientId = '';
+  if (elements.clientFormTitle) {
+    elements.clientFormTitle.textContent = 'Add client';
+  }
+  if (elements.clientSubmitBtn) {
+    elements.clientSubmitBtn.textContent = 'Save client';
+  }
+  if (elements.clientEditCancelBtn) {
+    elements.clientEditCancelBtn.hidden = true;
+  }
+
+  elements.clientForm.reset();
+  document.getElementById('clientDefaultCurrency').value = reportingCurrency();
+  elements.clientPreferredPaymentMethod.value = '';
+  syncClientIdPlaceholders();
+}
+
+function loadClientForEditing(client) {
+  if (!client) return;
+
+  uiState.editingClientId = client.id;
+
+  if (elements.clientFormTitle) {
+    elements.clientFormTitle.textContent = 'Edit client';
+  }
+  if (elements.clientSubmitBtn) {
+    elements.clientSubmitBtn.textContent = 'Update client';
+  }
+  if (elements.clientEditCancelBtn) {
+    elements.clientEditCancelBtn.hidden = false;
+  }
+
+  document.getElementById('clientName').value = client.name || '';
+  document.getElementById('clientContactName').value = client.contactName || '';
+  document.getElementById('clientDisplayId').value = client.displayId || '';
+  document.getElementById('clientEmail').value = client.email || '';
+  document.getElementById('clientVatNumber').value = client.vatNumber || '';
+  document.getElementById('clientAddress').value = client.address || '';
+  document.getElementById('clientDefaultVat').value = String(client.defaultVatRate ?? 21);
+  document.getElementById('clientDefaultCurrency').value = normalizeCurrencyCode(client.defaultCurrency || reportingCurrency());
+  elements.clientPreferredPaymentMethod.value = String(client.preferredPaymentMethodId || '').trim();
+
+  showView('clients');
+  elements.clientForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.getElementById('clientName').focus();
+}
+
+function validateClientInput({ name, email, displayId, excludeClientId = '' }) {
+  if (!name) {
+    alert('Client name is required.');
+    return false;
+  }
+
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    alert('Please enter a valid email address.');
+    return false;
+  }
+
+  const duplicateDisplayId = state.clients.some((client) => client.displayId === displayId && client.id !== excludeClientId);
+  if (duplicateDisplayId) {
+    alert('Client ID already exists. Please use another one.');
+    return false;
+  }
+
+  return true;
+}
+
 function openCreateClientModal() {
   document.getElementById('quickClientDisplayId').value = generateClientDisplayId();
   syncClientIdPlaceholders();
@@ -438,9 +506,7 @@ function renderAll() {
 }
 
 function resetForms() {
-  elements.clientForm.reset();
-  document.getElementById('clientDefaultCurrency').value = reportingCurrency();
-  elements.clientPreferredPaymentMethod.value = '';
+  resetClientEditMode();
   elements.invoiceForm.reset();
   elements.invoiceIssueDate.value = todayISO();
   const dueDate = new Date();
@@ -622,25 +688,54 @@ try {
 elements.clientForm.addEventListener('submit', (event) => {
   event.preventDefault();
   const formData = new FormData(elements.clientForm);
-  const displayId = formData.get('clientDisplayId') || generateClientDisplayId();
-  state.clients.push({
-    id: crypto.randomUUID(),
+  const name = String(formData.get('clientName') || '').trim();
+  const email = String(formData.get('clientEmail') || '').trim();
+  const displayId = String(formData.get('clientDisplayId') || generateClientDisplayId()).trim();
+
+  if (!validateClientInput({
+    name,
+    email,
     displayId,
-    name: String(formData.get('clientName') || '').trim(),
+    excludeClientId: uiState.editingClientId,
+  })) {
+    return;
+  }
+
+  const nextClient = {
+    id: uiState.editingClientId || crypto.randomUUID(),
+    displayId,
+    name,
     contactName: String(formData.get('clientContactName') || '').trim(),
-    email: String(formData.get('clientEmail') || '').trim(),
+    email,
     vatNumber: String(formData.get('clientVatNumber') || '').trim(),
     address: String(formData.get('clientAddress') || '').trim(),
     defaultVatRate: Number(formData.get('clientDefaultVat') || 0),
     defaultCurrency: normalizeCurrencyCode(formData.get('clientDefaultCurrency') || reportingCurrency()),
     preferredPaymentMethodId: String(formData.get('clientPreferredPaymentMethod') || '').trim(),
-  });
+  };
+
+  const isEditing = Boolean(uiState.editingClientId);
+  if (isEditing) {
+    const clientIndex = state.clients.findIndex((client) => client.id === uiState.editingClientId);
+    if (clientIndex === -1) {
+      alert('Could not find this client record. Please try again.');
+      resetClientEditMode();
+      renderAll();
+      return;
+    }
+    state.clients[clientIndex] = nextClient;
+  } else {
+    state.clients.push(nextClient);
+  }
+
   saveState();
   renderAll();
-  elements.clientForm.reset();
-  document.getElementById('clientDefaultCurrency').value = reportingCurrency();
-  elements.clientPreferredPaymentMethod.value = '';
-  syncClientIdPlaceholders();
+  resetClientEditMode();
+  alert(isEditing ? 'Client updated successfully.' : 'Client saved successfully.');
+});
+
+elements.clientEditCancelBtn.addEventListener('click', () => {
+  resetClientEditMode();
 });
 
 elements.expenseForm.addEventListener('submit', (event) => {
@@ -1038,6 +1133,21 @@ elements.expensesTableBody.addEventListener('click', (event) => {
       resetExpenseEditMode();
     }
   }
+});
+
+elements.clientsTableBody.addEventListener('click', (event) => {
+  const button = event.target.closest('button[data-action]');
+  if (!button) return;
+
+  if (button.dataset.action !== 'edit-client') return;
+
+  const client = state.clients.find((item) => item.id === button.dataset.id);
+  if (!client) {
+    alert('Could not find this client record.');
+    return;
+  }
+
+  loadClientForEditing(client);
 });
 
 async function init() {

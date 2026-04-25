@@ -151,7 +151,7 @@
             <div class="panel-header">
               <div>
                 <p class="eyebrow">Client record</p>
-                <h3>Add client</h3>
+                <h3 id="client-form-title">Add client</h3>
               </div>
             </div>
             <form id="client-form" class="form-grid">
@@ -204,7 +204,8 @@
                 <select id="clientPreferredPaymentMethod" name="clientPreferredPaymentMethod"></select>
               </div>
               <div class="form-actions full-span">
-                <button type="submit" class="primary-btn">Save client</button>
+                <button id="client-submit-btn" type="submit" class="primary-btn">Save client</button>
+                <button id="client-edit-cancel-btn" type="button" class="secondary-btn" hidden>Cancel edit</button>
               </div>
             </form>
           </section>
@@ -226,6 +227,7 @@
                     <th>VAT ID</th>
                     <th>Default VAT</th>
                     <th>Currency</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody id="clients-table-body"></tbody>
